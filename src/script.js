@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import * as dat from 'lil-gui'
 import * as CANNON from 'cannon-es'
+import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader";
 
 /**
  * Debug
@@ -10,11 +11,9 @@ import * as CANNON from 'cannon-es'
 const gui = new dat.GUI()
 const debugObject = {}
 
-debugObject.createSphere = () => {
-    createSphere(Math.random() * 0.5,{x: (Math.random() - 0.5) * 3, y: 3, z: (Math.random() - 0.5) * 3})
-}
+
 debugObject.createBoxes = () => {
-    createBoxes(Math.random(),Math.random(),Math.random(),{x: (Math.random() - 0.5) * 3, y: 3, z: (Math.random() - 0.5) * 3})
+    createBoxes(0.5,0.5,0.5,{x: (Math.random() - 0.5) * 3, y: 3, z: (Math.random() - 0.5) * 3})
 }
 debugObject.reset = () => {
     for (const object of objectToUpdate){
@@ -31,7 +30,6 @@ debugObject.reset = () => {
 }
 
 
-gui.add(debugObject, 'createSphere')
 gui.add(debugObject, 'createBoxes')
 gui.add(debugObject,'reset')
 
@@ -66,6 +64,8 @@ const playHitSound = (collision) => {
  */
 const textureLoader = new THREE.TextureLoader()
 const cubeTextureLoader = new THREE.CubeTextureLoader()
+const gltfLoader = new GLTFLoader()
+
 
 const environmentMapTexture = cubeTextureLoader.load([
     '/textures/environmentMaps/0/px.png',
@@ -195,40 +195,6 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
  */
 const objectToUpdate = []
 
-// Create Sphere
-const sphereGeometry = new THREE.SphereBufferGeometry(1,20,20)
-const sphereMaterial = new THREE.MeshStandardMaterial({
-    metalness: 0.3,
-    roughness: 0.4,
-    envMap: environmentMapTexture
-})
-
-const createSphere = (radius, position) => {
-    // Three.js mesh
-    const mesh = new THREE.Mesh(sphereGeometry, sphereMaterial)
-    mesh.scale.set(radius,radius,radius)
-    mesh.castShadow = true
-    mesh.position.copy(position)
-    scene.add(mesh)
-
-    // Cannon.js body
-    const shape = new CANNON.Sphere(radius)
-    const body = new CANNON.Body({
-        mass: 1,
-        position: new CANNON.Vec3(0,3,0),
-        shape,
-        material: defaultMaterial
-    })
-    body.position.copy(position)
-    body.addEventListener('collide', playHitSound)
-    world.addBody(body)
-
-    // Save in objects to update
-    objectToUpdate.push({
-        mesh,
-        body
-    })
-}
 
 
 // Create Boxes
@@ -238,6 +204,11 @@ const boxMaterial = new THREE.MeshStandardMaterial({
     roughness: 0.4,
     envMap: environmentMapTexture
 })
+
+var localUp = new CANNON.Vec3();
+var inverseBodyOrientation = new CANNON.Quaternion();
+var limit = Math.sin(Math.PI/4);
+
 const createBoxes = (width, height, depth, position) => {
     // Three.js mesh
     const mesh = new THREE.Mesh(boxGeometry, boxMaterial)
@@ -256,6 +227,38 @@ const createBoxes = (width, height, depth, position) => {
     })
     body.position.copy(position)
     body.addEventListener('collide', playHitSound)
+    body.addEventListener('sleep',() => {
+        // Transform the world up vector to local body space
+        localUp.set(0,1,0);
+        body.quaternion.inverse(inverseBodyOrientation);
+        inverseBodyOrientation.vmult(localUp, localUp);
+
+// Check which side is up
+        if(localUp.x > limit){
+            // Positive x is up
+            console.log('1')
+        } else if(localUp.x < -limit){
+            // Negative x is up
+            console.log('6')
+        } else if(localUp.y > limit){
+            // Positive y is up
+            console.log('2')
+        } else if(localUp.y < -limit){
+            // Negative y is up
+            console.log('5')
+        } else if(localUp.z > limit){
+            // Positive z is up
+            console.log('3')
+        } else if(localUp.z < -limit){
+            // Negative z is up
+            console.log('4')
+        } else {
+            // The box is not resting flat on the ground plane
+        }
+
+
+    })
+
     world.addBody(body)
 
     // Save in objects to update
